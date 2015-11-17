@@ -16,33 +16,64 @@ using std::string;
 using std::cout;
 using std::endl;
 
+#define LECTURE 0
+#define ECRITURE 1
+
 int main(void) {
 
     string ping = "Ping-";
     string pong = "Pong\n";
 
+    int max = 100;
     int fichier = open("match.txt",  O_CREAT | O_TRUNC | O_WRONLY, 0755);
-    pid_t pid = NULL;
+    int tube_p[2], tube_f[2];
+    pid_t pid, wpid;
+
+    char c;
 
     if(fichier == -1) {
         perror("Erreur match.txt");
         exit(EXIT_FAILURE);
     }
 
-    for(int i = 0; i < 3; i++) {
-        pid = fork();
-
-        if( pid == -1 ) {
-            perror("Erreur fork");
-            exit(EXIT_FAILURE);
-        } else if( pid > 0 ) { // Pere
-            write(fichier, ping.c_str(), ping.length());
-        } else { // Fils
-            write(fichier, pong.c_str(), pong.length());
-        }
+    if(pipe(tube_p) == -1 || pipe(tube_f) == -1 || (pid = fork()) == -1) {
+        perror("Erreur");
+        exit(errno);
     }
 
-    close(fichier);
-    cout << "Fin de " << getpid() << endl;
+    if(pid == -1) {
+        perror("Erreur");
+    } else if(pid > 0) { // Père
+
+        close(tube_f[ECRITURE]);
+        close(tube_p[LECTURE]);
+
+        for(int i = 0; i < max; i++) {
+            write(fichier, ping.c_str(), ping.length());
+            write(tube_p[ECRITURE], "a", 1);
+            read(tube_f[LECTURE], &c, 1);
+        }
+
+        close(fichier);
+        close(tube_f[ECRITURE]);
+        wait(NULL);
+
+    } else { // Fils
+
+        close(tube_f[LECTURE]);
+        close(tube_p[ECRITURE]);
+
+        for(int i = 0; i < max; i++) {
+            write(fichier, pong.c_str(), pong.length());
+            write(tube_f[ECRITURE], "a", 1);
+            read(tube_p[LECTURE], &c, 1);
+        }
+
+        close(fichier);
+        close(tube_p[ECRITURE]);
+        wait(NULL);
+    }
+
+    std::cout << "Fin de " << getpid() << endl;
     return EXIT_SUCCESS;
 }
